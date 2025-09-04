@@ -1,0 +1,166 @@
+pub mod handlers;
+pub mod middleware;
+pub mod models;
+pub mod trust_network;
+pub mod utils;
+
+use std::{collections::HashMap, env, path::PathBuf, sync::Arc};
+
+use crate::models::AppState;
+use crate::trust_network::refresh_trust_network;
+use crate::utils::{build_file_index, enforce_storage_limits};
+use axum::Router;
+use dotenv::dotenv;
+use nostr_relay_pool::prelude::*;
+use tokio::fs;
+use tokio::sync::RwLock;
+use tracing::{error, info};
+
+use axum::{
+    middleware::from_fn,
+    routing::{delete, get, put},
+};
+use handlers::*;
+use middleware::cors_middleware;
+
+pub async fn create_app(state: AppState) -> Router {
+    Router::new()
+        .route("/upload", put(upload_file).head(head_upload))
+        .route("/list", get(list_blobs))
+        .route("/list/:id", get(list_blobs))
+        .route("/mirror", put(mirror_blob))
+        .route("/_stats", get(get_stats))
+        .route("/", get(serve_index))
+        .route("/index.html", get(serve_index))
+        .route("/:filename", delete(method_not_allowed))
+        .route(
+            "/:filename",
+            get(handle_file_request).head(handle_file_request),
+        )
+        .layer(from_fn(cors_middleware))
+        .with_state(state)
+}
+
+pub async fn load_app_state() -> AppState {
+    dotenv().ok();
+
+    let max_total_size = env::var("MAX_TOTAL_SIZE")
+        .unwrap_or_else(|_| "99999".to_string())
+        .parse::<u64>()
+        .expect("Invalid value for MAX_TOTAL_SIZE")
+        .checked_mul(1024 * 1024)
+        .expect("MAX_TOTAL_SIZE value too large");
+
+    let max_total_files = env::var("MAX_TOTAL_FILES")
+        .unwrap_or_else(|_| "1000000".to_string())
+        .parse::<usize>()
+        .expect("Invalid value for MAX_TOTAL_FILES");
+
+    let bind_addr = env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+
+    let public_url = env::var("PUBLIC_URL").unwrap_or_else(|_| "http://127.0.0.1:3000".to_string());
+
+    let upload_dir = PathBuf::from("./files");
+    fs::create_dir_all(&upload_dir).await.unwrap();
+
+    let file_index = Arc::new(RwLock::new(HashMap::new()));
+    build_file_index(&upload_dir, &file_index).await;
+
+    let cleanup_interval_secs = env::var("CLEANUP_INTERVAL_SECS")
+        .unwrap_or_else(|_| "30".to_string())
+        .parse()
+        .expect("Invalid value for CLEANUP_INTERVAL_SECS");
+
+    let max_file_age_days = env::var("MAX_FILE_AGE_DAYS")
+        .unwrap_or_else(|_| "0".to_string())
+        .parse()
+        .expect("Invalid value for MAX_FILE_AGE_DAYS");
+
+    // Parse allowed pubkeys from environment variable
+    let mut allowed_pubkeys: Vec<PublicKey> = env::var("ALLOWED_NPUBS")
+        .unwrap_or_default()
+        .split(',')
+        .filter_map(|npub| {
+            if npub.trim().is_empty() {
+                None
+            } else {
+                match PublicKey::from_bech32(npub.trim()) {
+                    Ok(pk) => Some(pk),
+                    Err(e) => {
+                        error!("Failed to parse npub {}: {}", npub, e);
+                        None
+                    }
+                }
+            }
+        })
+        .collect();
+
+        allowed_pubkeys
+            .push(
+                PublicKey::from_hex("a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd")
+                .expect("")
+                );
+
+        info!("107:main:test{:?}", allowed_pubkeys);
+
+    AppState {
+        upload_dir,
+        file_index,
+        max_total_size,
+        max_total_files,
+        bind_addr,
+        public_url,
+        cleanup_interval_secs,
+        changes_pending: Arc::new(RwLock::new(true)),
+        allowed_pubkeys,
+        trusted_pubkeys: Arc::new(RwLock::new(HashMap::new())),
+        max_file_age_days,
+        files_uploaded: Arc::new(RwLock::new(0)),
+        files_downloaded: Arc::new(RwLock::new(0)),
+        upload_throughput_data: Arc::new(RwLock::new(Vec::new())),
+        download_throughput_data: Arc::new(RwLock::new(Vec::new())),
+    }
+}
+
+pub fn start_cleanup_job(state: AppState) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
+            state.cleanup_interval_secs,
+        ));
+        loop {
+        info!("126:main:test");
+            interval.tick().await;
+            let mut changes = state.changes_pending.write().await;
+            if *changes {
+                enforce_storage_limits(&state).await;
+                *changes = false;
+            }
+        }
+    });
+}
+
+pub fn start_trust_network_refresh_job(state: AppState) {
+    tokio::spawn(async move {
+        // Only run if ALLOW_WOT is enabled
+        if env::var("ALLOW_WOT").is_err() {
+            //return;
+        }
+
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(4 * 3600));
+        loop {
+        info!("145:main:test");
+            interval.tick().await;
+            if !state.allowed_pubkeys.is_empty() {
+                match refresh_trust_network(&state.allowed_pubkeys).await {
+                    Ok(trusted) => {
+                        let mut trusted_pubkeys = state.trusted_pubkeys.write().await;
+                        *trusted_pubkeys = trusted;
+                    }
+                    Err(e) => {
+                        error!("Failed to refresh trust network: {}", e);
+                    }
+                }
+            }
+        }
+    });
+}

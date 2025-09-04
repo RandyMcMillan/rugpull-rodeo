@@ -3,6 +3,11 @@ name = "temp-st"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "temp_st"
+path = "src/lib.rs"
+
+
 [dependencies]
 axum = "0.7.9"
 headers = "0.3"

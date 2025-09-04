@@ -88,6 +88,11 @@ pub async fn list_blobs(
         });
     }
 
+	for blob in &blobs {
+    info!("blob.url={:?}", Json(&blob.url));
+    info!("blob.url={:?}", Json(&blob.sha256));
+
+	}
     Ok(Json(blobs))
 }
 
