@@ -5,7 +5,7 @@ use std::{
     collections::HashMap,
     path::PathBuf,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH, Instant},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::RwLock;
 
@@ -84,7 +84,11 @@ impl AppState {
 
         let upload_throughput_mbps = if recent_upload_data.len() > 1 {
             let total_bytes: u64 = recent_upload_data.iter().map(|(_, bytes)| bytes).sum();
-            let time_span = recent_upload_data.last().unwrap().0.duration_since(recent_upload_data.first().unwrap().0);
+            let time_span = recent_upload_data
+                .last()
+                .unwrap()
+                .0
+                .duration_since(recent_upload_data.first().unwrap().0);
             if time_span.as_secs() > 0 {
                 (total_bytes as f64 / (1024.0 * 1024.0)) / (time_span.as_secs() as f64)
             } else {
@@ -103,7 +107,11 @@ impl AppState {
 
         let download_throughput_mbps = if recent_download_data.len() > 1 {
             let total_bytes: u64 = recent_download_data.iter().map(|(_, bytes)| bytes).sum();
-            let time_span = recent_download_data.last().unwrap().0.duration_since(recent_download_data.first().unwrap().0);
+            let time_span = recent_download_data
+                .last()
+                .unwrap()
+                .0
+                .duration_since(recent_download_data.first().unwrap().0);
             if time_span.as_secs() > 0 {
                 (total_bytes as f64 / (1024.0 * 1024.0)) / (time_span.as_secs() as f64)
             } else {

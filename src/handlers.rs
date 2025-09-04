@@ -1,4 +1,5 @@
 use axum::body::to_bytes;
+use axum::http::header::{CACHE_CONTROL, EXPIRES};
 use axum::{
     body::Body,
     extract::{Path as AxumPath, Query, State},
@@ -7,7 +8,9 @@ use axum::{
     Json,
 };
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use chrono::{Duration, Utc};
 use futures_util::StreamExt;
+use hyper::http::HeaderValue;
 use mime_guess::from_path;
 use nostr_relay_pool::prelude::*;
 use reqwest::{header as reqwest_header, Client};
@@ -24,9 +27,6 @@ use tokio::{
 use tokio_util::io::ReaderStream;
 use tracing::{error, info, warn};
 use uuid;
-use axum::http::header::{CACHE_CONTROL, EXPIRES};
-use chrono::{Duration, Utc};
-use hyper::http::HeaderValue;
 
 use crate::models::{AppState, BlobDescriptor, FileMetadata, ListQuery, Stats};
 use crate::utils::{find_file, get_nested_path, get_sha256_hash_from_filename, parse_range_header};
@@ -36,7 +36,6 @@ pub async fn list_blobs(
     Query(params): Query<ListQuery>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<BlobDescriptor>>, (StatusCode, String)> {
-    
     // Validate Nostr authorization
     let auth = headers.get(header::AUTHORIZATION).ok_or_else(|| {
         (
@@ -88,11 +87,10 @@ pub async fn list_blobs(
         });
     }
 
-	for blob in &blobs {
-    info!("blob.url={:?}", Json(&blob.url));
-    info!("blob.url={:?}", Json(&blob.sha256));
-
-	}
+    for blob in &blobs {
+        info!("blob.url={:?}", Json(&blob.url));
+        info!("blob.url={:?}", Json(&blob.sha256));
+    }
     Ok(Json(blobs))
 }
 
@@ -101,7 +99,6 @@ pub async fn handle_file_request(
     State(state): State<AppState>,
     req: Request<Body>,
 ) -> Result<Response, StatusCode> {
-    
     info!("get for url: {}", filename);
 
     if let Some(filename) = get_sha256_hash_from_filename(&filename) {
@@ -126,11 +123,13 @@ pub async fn handle_file_request(
                     {
                         let mut files_downloaded = state.files_downloaded.write().await;
                         *files_downloaded += 1;
-                        
+
                         // Track download throughput
-                        let mut download_throughput_data = state.download_throughput_data.write().await;
-                        download_throughput_data.push((std::time::Instant::now(), file_metadata.size));
-                        
+                        let mut download_throughput_data =
+                            state.download_throughput_data.write().await;
+                        download_throughput_data
+                            .push((std::time::Instant::now(), file_metadata.size));
+
                         // Keep only last 1000 entries to prevent memory bloat
                         if download_throughput_data.len() > 1000 {
                             download_throughput_data.drain(0..100);
@@ -139,9 +138,7 @@ pub async fn handle_file_request(
                     return serve_file_with_range(file_metadata.path, req).await;
                 }
             }
-            None => {
-                Err(StatusCode::NOT_FOUND)
-            }
+            None => Err(StatusCode::NOT_FOUND),
         }
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -178,7 +175,9 @@ async fn validate_nostr_auth(auth: &str, state: &AppState) -> Result<Event, Stat
     if !auth_str.starts_with("Nostr ") {
         error!("Invalid Authorization header prefix");
         return Err(StatusCode::UNAUTHORIZED);
-    } else { info!("auth_str={}", &auth_str); }
+    } else {
+        info!("auth_str={}", &auth_str);
+    }
 
     let base64_str = &auth_str[6..]; // Remove "Nostr " prefix
     let decoded_bytes = STANDARD.decode(base64_str).map_err(|e| {
@@ -244,7 +243,6 @@ pub async fn upload_file(
     headers: HeaderMap,
     req: Request<Body>,
 ) -> Result<Response, StatusCode> {
-    
     // Validate Nostr authorization
     let auth = headers.get(header::AUTHORIZATION).ok_or_else(|| {
         error!("Missing Authorization header");
@@ -277,7 +275,7 @@ pub async fn upload_file(
 
     // Create a temporary file
     let temp_dir = state.upload_dir.join("temp");
-	info!("275:temp_dir={}", temp_dir.display());
+    info!("275:temp_dir={}", temp_dir.display());
     fs::create_dir_all(&temp_dir).await.map_err(|e| {
         error!("Failed to create temp directory: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
@@ -393,10 +391,10 @@ pub async fn upload_file(
     {
         let mut files_uploaded = state.files_uploaded.write().await;
         *files_uploaded += 1;
-        
+
         let mut upload_throughput_data = state.upload_throughput_data.write().await;
         upload_throughput_data.push((std::time::Instant::now(), total_bytes as u64));
-        
+
         // Keep only last 1000 entries to prevent memory bloat
         if upload_throughput_data.len() > 1000 {
             upload_throughput_data.drain(0..100);
@@ -417,7 +415,6 @@ pub async fn mirror_blob(
     headers: HeaderMap,
     req: Request<Body>,
 ) -> Result<Response, StatusCode> {
-    
     // Validate Nostr authorization
     let auth = headers.get(header::AUTHORIZATION).ok_or_else(|| {
         error!("Missing Authorization header");
@@ -545,11 +542,11 @@ pub async fn mirror_blob(
     {
         let mut files_uploaded = state.files_uploaded.write().await;
         *files_uploaded += 1;
-        
+
         // Track upload throughput for mirrored files
         let mut upload_throughput_data = state.upload_throughput_data.write().await;
         upload_throughput_data.push((std::time::Instant::now(), blob_bytes.len() as u64));
-        
+
         // Keep only last 1000 entries to prevent memory bloat
         if upload_throughput_data.len() > 1000 {
             upload_throughput_data.drain(0..100);
@@ -592,9 +589,7 @@ async fn serve_file_with_range(path: PathBuf, req: Request<Body>) -> Result<Resp
     let expires_str = expires_dt.format("%a, %d %b %Y %H:%M:%S GMT").to_string();
     let expires_header = HeaderValue::from_str(&expires_str).unwrap();
 
-    let filename = path.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("file");
+    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
     let content_disposition = format!("inline; filename=\"{}\"", filename);
 
     let mut file = File::open(&path)
@@ -660,26 +655,36 @@ pub async fn head_upload(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
-    
     // Validate Nostr authorization
     let auth = match headers.get(header::AUTHORIZATION) {
         Some(a) => a,
         None => {
-            return Ok(Response::builder().status(StatusCode::UNAUTHORIZED).body(Body::empty()).unwrap());
+            return Ok(Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Body::empty())
+                .unwrap());
         }
     };
     match validate_nostr_auth(
         match auth.to_str() {
             Ok(s) => s,
             Err(_) => {
-                return Ok(Response::builder().status(StatusCode::UNAUTHORIZED).body(Body::empty()).unwrap());
+                return Ok(Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .body(Body::empty())
+                    .unwrap());
             }
         },
         &state,
-    ).await {
+    )
+    .await
+    {
         Ok(e) => e,
         Err(_) => {
-            return Ok(Response::builder().status(StatusCode::UNAUTHORIZED).body(Body::empty()).unwrap());
+            return Ok(Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .body(Body::empty())
+                .unwrap());
         }
     };
 
@@ -688,21 +693,21 @@ pub async fn head_upload(
     let total_files = index.len();
     let total_size: u64 = index.values().map(|m| m.size).sum();
     if total_files >= state.max_total_files || total_size >= state.max_total_size {
-        return Ok(Response::builder().status(StatusCode::INSUFFICIENT_STORAGE).body(Body::empty()).unwrap());
+        return Ok(Response::builder()
+            .status(StatusCode::INSUFFICIENT_STORAGE)
+            .body(Body::empty())
+            .unwrap());
     }
 
     // Compose headers per spec
-    let builder = Response::builder()
-        .status(StatusCode::OK);
+    let builder = Response::builder().status(StatusCode::OK);
     // Optionally add more headers as needed by spec
-    
+
     Ok(builder.body(Body::empty()).unwrap())
 }
 
 /// Handles GET /_stats to return application statistics.
-pub async fn get_stats(
-    State(state): State<AppState>,
-) -> Result<Json<Stats>, StatusCode> {
+pub async fn get_stats(State(state): State<AppState>) -> Result<Json<Stats>, StatusCode> {
     let stats = state.get_stats().await;
     Ok(Json(stats))
 }

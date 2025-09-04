@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use std::time::Duration;
-use tracing::info;
 use nostr_relay_pool::{
     prelude::*,
     relay::limits::{RelayEventLimits, RelayMessageLimits},
 };
+use std::collections::HashMap;
+use std::time::Duration;
+use tracing::info;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -136,12 +136,10 @@ pub async fn refresh_trust_network(
         .filter_map(|(pk_str, count)| PublicKey::from_hex(&pk_str).ok().map(|pk| (pk, count)))
         .collect();
 
-
-	for key in &trusted_pubkeys {
-
-		info!("\n{:?}", key);
-		info!("");
-	}
+    for key in &trusted_pubkeys {
+        info!("\n{:?}", key);
+        info!("");
+    }
 
     println!(
         "🫂 Total number of trusted pubkeys: {}",

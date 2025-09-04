@@ -33,10 +33,17 @@ pub async fn build_file_index(upload_dir: &Path, index: &RwLock<HashMap<String, 
         if let Ok(mut entries) = fs::read_dir(&current_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
-info!(">>>>Path is: {}", &path.display());
-info!(">>>>37:path={:?}:{:?}", path.display(), get_sha256_hash_from_filename(&format!("{:?}", path.display())));
-info!(">>>>38:path={:?}", get_sha256_hash_from_filename("00gg0"));
-info!(">>>>39:path={:?}", get_sha256_hash_from_filename("deadbeef"));
+                info!(">>>>Path is: {}", &path.display());
+                info!(
+                    ">>>>37:path={:?}:{:?}",
+                    path.display(),
+                    get_sha256_hash_from_filename(&format!("{:?}", path.display()))
+                );
+                info!(">>>>38:path={:?}", get_sha256_hash_from_filename("00gg0"));
+                info!(
+                    ">>>>39:path={:?}",
+                    get_sha256_hash_from_filename("deadbeef")
+                );
                 if path.is_file() {
                     if let Some(name) = entry.file_name().to_str().map(|s| s.to_string()) {
                         let key = name[..64.min(name.len())].to_string();
@@ -69,7 +76,7 @@ info!(">>>>39:path={:?}", get_sha256_hash_from_filename("deadbeef"));
                         }
                     }
                 } else if path.is_dir() {
-                        info!("path.is_dir={}", path.display());
+                    info!("path.is_dir={}", path.display());
                     dirs_to_process.push(path);
                 }
             }
@@ -175,14 +182,14 @@ pub async fn enforce_storage_limits(state: &AppState) {
 }
 
 pub fn get_sha256_hash_from_filename(filename: &str) -> Option<String> {
-	info!("176:filename={}", filename);
+    info!("176:filename={}", filename);
     let re = Regex::new(r"^([a-fA-F0-9]{64})(\.[a-zA-Z0-9]+)?$").unwrap();
     if let Some(captures) = re.captures(filename) {
-	info!("179:filename={:?}", captures[0].to_string());
-	info!("180:filename={:?}", captures[1].to_string());
+        info!("179:filename={:?}", captures[0].to_string());
+        info!("180:filename={:?}", captures[1].to_string());
         Some(captures[1].to_string()) // Return the first capture group (the hash)
     } else {
-	info!("183:filename={}", filename);
+        info!("183:filename={}", filename);
         None
     }
 }

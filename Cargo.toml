@@ -7,27 +7,26 @@ edition = "2021"
 name = "temp_st"
 path = "src/lib.rs"
 
-
 [dependencies]
 axum = "0.7.9"
+axum-server = "0.7.2"
+base64 = "0.21"
+chrono = "0.4.41"
+dotenv = "0.15.0"
+futures-util = "0.3.31"
 headers = "0.3"
+hyper = "1.6.0"
+mime_guess = "2"
+nostr = "0.28"
+nostr-relay-pool = "0.40.1"
+regex = "1"
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10.8"
 tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { version = "0.6", features = ["fs"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio-util = { version = "0.7", features = ["io"] }
-regex = "1"
-mime_guess = "2"
-axum-server = "0.7.2"
-futures-util = "0.3.31"
-sha2 = "0.10.8"
-reqwest = { version = "0.11", features = ["json"] }
-hyper = "1.6.0"
-dotenv = "0.15.0"
 uuid = { version = "1.7", features = ["v4"] }
-base64 = "0.21"
-nostr = "0.28"
-nostr-relay-pool = "0.40.1"
-chrono = "0.4.41"
