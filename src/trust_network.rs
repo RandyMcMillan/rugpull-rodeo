@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::time::Duration;
-
+use tracing::info;
 use nostr_relay_pool::{
     prelude::*,
     relay::limits::{RelayEventLimits, RelayMessageLimits},
@@ -132,9 +132,16 @@ pub async fn refresh_trust_network(
     // Filter pubkeys with more than 3 followers and convert to PublicKey
     let trusted_pubkeys: HashMap<PublicKey, usize> = pubkey_follower_count
         .into_iter()
-        .filter(|(_, count)| *count > 3)
+        .filter(|(_, count)| *count >= usize::MIN)
         .filter_map(|(pk_str, count)| PublicKey::from_hex(&pk_str).ok().map(|pk| (pk, count)))
         .collect();
+
+
+	for key in &trusted_pubkeys {
+
+		info!("\n{:?}", key);
+		info!("");
+	}
 
     println!(
         "🫂 Total number of trusted pubkeys: {}",

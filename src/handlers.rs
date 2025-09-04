@@ -173,7 +173,7 @@ async fn validate_nostr_auth(auth: &str, state: &AppState) -> Result<Event, Stat
     if !auth_str.starts_with("Nostr ") {
         error!("Invalid Authorization header prefix");
         return Err(StatusCode::UNAUTHORIZED);
-    }
+    } else { info!("auth_str={}", &auth_str); }
 
     let base64_str = &auth_str[6..]; // Remove "Nostr " prefix
     let decoded_bytes = STANDARD.decode(base64_str).map_err(|e| {
@@ -272,6 +272,7 @@ pub async fn upload_file(
 
     // Create a temporary file
     let temp_dir = state.upload_dir.join("temp");
+	info!("275:temp_dir={}", temp_dir.display());
     fs::create_dir_all(&temp_dir).await.map_err(|e| {
         error!("Failed to create temp directory: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR

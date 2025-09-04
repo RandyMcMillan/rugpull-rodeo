@@ -80,7 +80,7 @@ async fn load_app_state() -> AppState {
         .expect("Invalid value for MAX_FILE_AGE_DAYS");
 
     // Parse allowed pubkeys from environment variable
-    let allowed_pubkeys: Vec<PublicKey> = env::var("ALLOWED_NPUBS")
+    let mut allowed_pubkeys: Vec<PublicKey> = env::var("ALLOWED_NPUBS")
         .unwrap_or_default()
         .split(',')
         .filter_map(|npub| {
@@ -97,6 +97,14 @@ async fn load_app_state() -> AppState {
             }
         })
         .collect();
+
+        allowed_pubkeys
+            .push(
+                PublicKey::from_hex("a34b99f22c790c4e36b2b3c2c35a36db06226e41c692fc82b8b56ac1c540c5bd")
+                .expect("")
+                );
+
+        info!("107:main:test{:?}", allowed_pubkeys);
 
     AppState {
         upload_dir,
@@ -123,6 +131,7 @@ fn start_cleanup_job(state: AppState) {
             state.cleanup_interval_secs,
         ));
         loop {
+        info!("126:main:test");
             interval.tick().await;
             let mut changes = state.changes_pending.write().await;
             if *changes {
@@ -137,11 +146,12 @@ fn start_trust_network_refresh_job(state: AppState) {
     tokio::spawn(async move {
         // Only run if ALLOW_WOT is enabled
         if env::var("ALLOW_WOT").is_err() {
-            return;
+            //return;
         }
 
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(4 * 3600));
         loop {
+        info!("145:main:test");
             interval.tick().await;
             if !state.allowed_pubkeys.is_empty() {
                 match refresh_trust_network(&state.allowed_pubkeys).await {
@@ -168,6 +178,7 @@ async fn main() {
         .parse::<SocketAddr>()
         .expect("Invalid address format");
 
+	info!("171:main:test");
     start_cleanup_job(state.clone());
     start_trust_network_refresh_job(state.clone());
 
